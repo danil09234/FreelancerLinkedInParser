@@ -47,14 +47,22 @@ def get_posts_trees(tree: lxml.etree) -> list:
 def get_inner_text(element: Union[lxml.etree.Element, lxml.etree.ElementTree]) -> str:
     text = element.text or ''
     for child in element:
-        text += get_inner_text(child)
+        text += " " + get_inner_text(child)
         if child.tail:
-            text += child.tail
+            text += " " + child.tail
     return text.strip()
 
 
+EMAIL_REGEX = None
+try:
+    with open("email_regex.txt", "r") as read_file:
+        EMAIL_REGEX = read_file.read()
+except FileNotFoundError:
+    raise RuntimeError("File with regex not found!")
+
+
 def extract_email(text: str) -> str | None:
-    email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
+    email_pattern = EMAIL_REGEX
     match = re.search(email_pattern, text)
     if match:
         return match.group()
