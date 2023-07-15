@@ -83,7 +83,10 @@ COMMENTS_NUMBER_XPATH = \
 def parse_html_soup(tree: lxml.etree) -> list[DataRow]:
     data_rows = []
     for post in get_posts_trees(tree):
-        full_name = post.xpath(FULL_NAME_XPATH)[0].text
+        try:
+            full_name = post.xpath(FULL_NAME_XPATH)[0].text
+        except IndexError:
+            continue
         job_title = post.xpath(JOB_TITLE_XPATH)[0].text
         date_field = post.xpath(DATE_XPATH)[0].text
         date = re.search(r"[1-9]\d?\w\w?", date_field).group()
@@ -188,7 +191,7 @@ async def parse_folder(folder_path: aiopath.AsyncPath, output_filename: aiopath.
 
 
 if __name__ == '__main__':
-    folder = aiopath.AsyncPath("Inputfolder")
+    folder = aiopath.AsyncPath("Inputfolder2")
     output = aiopath.AsyncPath("result.csv")
 
     asyncio.run(parse_folder(folder, output))
