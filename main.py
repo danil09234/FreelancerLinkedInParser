@@ -35,7 +35,7 @@ async def save_data_rows_to_csv(filename: aiopath.AsyncPath):
 
             for row in data_rows:
                 await writer.writerow(row)
-        raise StopAsyncIteration()
+    raise StopAsyncIteration
 
 
 def get_posts_trees(tree: lxml.etree) -> list:
@@ -141,7 +141,9 @@ async def send_data_to_csv_consumer(queue: asyncio.Queue, sender_function):
         if data is SENTINEL:
             try:
                 await sender_function.asend(None)
-            except RuntimeError:
+            except StopAsyncIteration:
+                pass
+            finally:
                 return
 
         await sender_function.asend(data)
@@ -170,16 +172,12 @@ async def parse_folder(folder_path: aiopath.AsyncPath, output_filename: aiopath.
         ) async for file in folder_path.iterdir()
     ]
 
-    sender_task = asyncio.create_task(send_data_to_csv_consumer(data_write_queue, sender_function))
+    consumer_task = asyncio.create_task(send_data_to_csv_consumer(data_write_queue, sender_function))
 
     await asyncio.gather(*parse_file_tasks)
-
     await data_write_queue.put(SENTINEL)
+    await consumer_task
 
-    try:
-        await sender_task
-    except StopAsyncIteration:
-        pass
 
 if __name__ == '__main__':
     folder = aiopath.AsyncPath("Inputfolder")
