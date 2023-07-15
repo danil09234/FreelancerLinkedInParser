@@ -1,5 +1,5 @@
 import re
-from typing import NamedTuple, Union, Coroutine, Any, Awaitable
+from typing import NamedTuple, Union, Coroutine, Any
 import csv
 import asyncio
 import aiopath
@@ -21,31 +21,24 @@ async def save_data_rows_to_csv(filename: aiopath.AsyncPath):
     async with filename.open('w', newline='') as file:
         writer = csv.writer(file)
 
-        await writer.writerow(['FullName', 'Job Title', 'Company', 'Email', 'Description', 'Date', 'No. Comments', 'Url'])
+        await writer.writerow(
+            ['FullName', 'Job Title', 'Company', 'Email', 'Description', 'Date', 'No. Comments', 'Url']
+        )
 
         while True:
 
             data_rows = yield
             if data_rows is None:
-                print("Data written")
+                print("All data written")
                 break
-            print("Writing data...")
+            print("Writing parsed data...")
 
             for row in data_rows:
                 await writer.writerow(row)
-        print("Stop iteration")
         raise StopAsyncIteration()
-    print("Here never")
 
 
 def get_posts_trees(tree: lxml.etree) -> list:
-    # all_ids = (str(tag['id']) for tag in soup.select('div[id]'))
-    # posts_ids = tuple(filter(lambda html_id: html_id.startswith("ember"), all_ids))
-
-    # all_ids = tree.xpath("//*/@id")
-    # posts_ids = tuple(map(str, filter(lambda html_id: html_id.startswith("ember"), all_ids)))
-    # print(posts_ids)
-
     posts = tree.xpath("//div[contains(@class, 'artdeco-card') and .//h2[contains(@class, 'visually-hidden')]]")
 
     return posts
@@ -69,16 +62,26 @@ def extract_email(text: str) -> str | None:
         return None
 
 
+FULL_NAME_XPATH = ".//span[contains(@class, 'update-components-actor__name')]//span[@dir='ltr']"
+JOB_TITLE_XPATH = ".//span[contains(@class, 'update-components-actor__description')]//span[@aria-hidden='true']"
+DATE_XPATH = ".//span[contains(@class, 'update-components-actor__sub-description')]//span[@class='visually-hidden']"
+DESCRIPTION_XPATH = ".//div[@class='update-components-text relative feed-shared-update-v2__commentary ']"
+URL_XPATH = \
+    ".//a[contains(@class, 'app-aware-link') and contains(@class, 'update-components-actor__container-link')]/@href"
+COMMENTS_NUMBER_XPATH = \
+    ".//li[contains(@class, 'social-details-social-counts__comments')]/button/span[@aria-hidden='true']/text()"
+
+
 def parse_html_soup(tree: lxml.etree) -> list[DataRow]:
     data_rows = []
     for post in get_posts_trees(tree):
-        full_name = post.xpath(".//span[contains(@class, 'update-components-actor__name')]//span[@dir='ltr']")[0].text
-        job_title = post.xpath(".//span[contains(@class, 'update-components-actor__description')]//span[@aria-hidden='true']")[0].text
-        date_field = post.xpath(".//span[contains(@class, 'update-components-actor__sub-description')]//span[@class='visually-hidden']")[0].text
+        full_name = post.xpath(FULL_NAME_XPATH)[0].text
+        job_title = post.xpath(JOB_TITLE_XPATH)[0].text
+        date_field = post.xpath(DATE_XPATH)[0].text
         date = re.search(r"[1-9]\d?\w\w?", date_field).group()
 
         try:
-            description_element = post.xpath(".//div[@class='update-components-text relative feed-shared-update-v2__commentary ']")[0]
+            description_element = post.xpath(DESCRIPTION_XPATH)[0]
             description = get_inner_text(description_element)
         except IndexError:
             description = None
@@ -88,9 +91,9 @@ def parse_html_soup(tree: lxml.etree) -> list[DataRow]:
         else:
             email = None
 
-        url = post.xpath(".//a[contains(@class, 'app-aware-link') and contains(@class, 'update-components-actor__container-link')]/@href")[0]
+        url = post.xpath(URL_XPATH)[0]
 
-        number_of_comments_field = post.xpath(".//li[contains(@class, 'social-details-social-counts__comments')]/button/span[@aria-hidden='true']/text()")[0]
+        number_of_comments_field = post.xpath(COMMENTS_NUMBER_XPATH)[0]
         number_of_comments = int(re.search(r'[\d,]+', number_of_comments_field).group().replace(',', ''))
 
         data_rows.append(
@@ -142,11 +145,11 @@ async def send_data_to_csv_consumer(queue: asyncio.Queue, sender_function):
                 return
 
         await sender_function.asend(data)
-        print("File processed")
 
 
 async def send_data_to_csv_producer(parser_function: Coroutine[Any, Any, list[DataRow]], queue: asyncio.Queue):
     data = await parser_function
+    print("File processed")
     await queue.put(data)
 
 
@@ -173,16 +176,10 @@ async def parse_folder(folder_path: aiopath.AsyncPath, output_filename: aiopath.
 
     await data_write_queue.put(SENTINEL)
 
-    print("Here 111")
-
     try:
         await sender_task
     except StopAsyncIteration:
         pass
-    print("Here 444")
-    # print(parsed_files)
-    # print(len(parsed_files))
-
 
 if __name__ == '__main__':
     folder = aiopath.AsyncPath("Inputfolder")
