@@ -87,9 +87,18 @@ def parse_html_soup(tree: lxml.etree) -> list[DataRow]:
             full_name = post.xpath(FULL_NAME_XPATH)[0].text
         except IndexError:
             continue
-        job_title = post.xpath(JOB_TITLE_XPATH)[0].text
-        date_field = post.xpath(DATE_XPATH)[0].text
-        date = re.search(r"[1-9]\d?\w\w?", date_field).group()
+
+        try:
+            job_title = post.xpath(JOB_TITLE_XPATH)[0].text
+        except IndexError:
+            job_title = None
+
+        try:
+            date_field = post.xpath(DATE_XPATH)[0].text
+        except IndexError:
+            date = None
+        else:
+            date = re.search(r"[1-9]\d?\w\w?", date_field).group()
 
         try:
             description_element = post.xpath(DESCRIPTION_XPATH)[0]
@@ -104,8 +113,12 @@ def parse_html_soup(tree: lxml.etree) -> list[DataRow]:
 
         url = post.xpath(URL_XPATH)[0]
 
-        number_of_comments_field = post.xpath(COMMENTS_NUMBER_XPATH)[0]
-        number_of_comments = int(re.search(r'[\d,]+', number_of_comments_field).group().replace(',', ''))
+        try:
+            number_of_comments_field = post.xpath(COMMENTS_NUMBER_XPATH)[0]
+        except IndexError:
+            number_of_comments = None
+        else:
+            number_of_comments = int(re.search(r'[\d,]+', number_of_comments_field).group().replace(',', ''))
 
         data_rows.append(
             DataRow(
@@ -166,11 +179,19 @@ async def send_data_to_csv_producer(parser_function: Coroutine[Any, Any, list[Da
     await queue.put(data)
 
 
-async def parse_folder(folder_path: aiopath.AsyncPath, output_filename: aiopath.AsyncPath):
+async def get_output_file() -> aiopath.AsyncPath:
+    index = 0
+    while True:
+        result = aiopath.AsyncPath(f"result_{index}.csv")
+        if not await result.exists():
+            return result
+        index += 1
+
+
+async def parse_folder(folder_path: aiopath.AsyncPath):
     if not await folder_path.is_dir():
         raise ValueError("Path is not a directory!")
-    if await output_filename.exists():
-        raise ValueError("Output filename exists!")
+    output_filename = await get_output_file()
 
     data_write_queue = asyncio.Queue()
     sender_function = save_data_rows_to_csv(output_filename)
@@ -192,6 +213,5 @@ async def parse_folder(folder_path: aiopath.AsyncPath, output_filename: aiopath.
 
 if __name__ == '__main__':
     folder = aiopath.AsyncPath("Inputfolder2")
-    output = aiopath.AsyncPath("result.csv")
 
-    asyncio.run(parse_folder(folder, output))
+    asyncio.run(parse_folder(folder))
